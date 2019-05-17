@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sys
 import zipfile
 from lxml import etree
@@ -7,13 +9,13 @@ from email.mime.multipart import MIMEMultipart
 
 
 def dump_tags(tree):
-    print '----------'
+    print('----------')
     for tag in tree.getchildren():
-        print tag
+        print(tag)
 
 
-def load_attachment(zip, name):
-    fh = zip.open(name)
+def load_attachment(zip_file, name):
+    fh = zip_file.open(name)
     return fh
 
 
@@ -43,17 +45,20 @@ def get_body(email):
             tag_body = email.find('.//OPFMessageCopyHTMLBody')
             mime_type = 'text/html'
 
-    body = tag_body.text
-    if body is not None:
-        # There might be no body if it's a calender reply or something.
-        # Calendar replies still have subject lines and addressees and stuff
-        # though so probably worth keeping.
-        body = body.strip().encode('utf-8')
+    if tag_body is None:
+        body = ""
+    else:
+        body = tag_body.text
+        if body is not None:
+            # There might be no body if it's a calender reply or something.
+            # Calendar replies still have subject lines and addressees and stuff
+            # though so probably worth keeping.
+            body = body.strip().encode('utf-8')
 
     return {mime_type: body}
 
 
-def get_attachments(zip, email):
+def get_attachments(zip_file, email):
     attachments = []
     tag_attachments = email.find('.//OPFMessageCopyAttachmentList')
     if tag_attachments is not None:
@@ -68,7 +73,7 @@ def get_attachments(zip, email):
             }
             url = attachment.get('OPFAttachmentURL')
             if url is not None:
-                fh = load_attachment(zip, url)
+                fh = load_attachment(zip_file, url)
                 file['file_path'] = url
                 file['file_handle'] = fh
             attachments.append(file)
@@ -114,7 +119,7 @@ def get_contacts(addresses):
     return names, emails
 
 
-def parse_message(zip, name):
+def parse_message(zip_file, name):
     headers = {
         'From': None,
         'To': None,
@@ -132,7 +137,7 @@ def parse_message(zip, name):
     author = None
 
     doc = None
-    fh = zip.open(name)
+    fh = zip_file.open(name)
     try:
         doc = etree.parse(fh)
     except etree.XMLSyntaxError:
@@ -163,7 +168,7 @@ def parse_message(zip, name):
         headers['BCC'] = bcc
 
         body = get_body(email)
-        attachments = get_attachments(zip, email)
+        attachments = get_attachments(zip_file, email)
 
         return {
             'headers': headers,
@@ -190,6 +195,8 @@ def make_email(headers, body, attachments):
             email = MIMEText(body['text/html'], 'html')
         elif 'text/plain' in body.keys():
             email = MIMEText(body['text/plain'], 'plain')
+        else:
+            raise AttributeError("Unknown email encoding in '%s'" % body.keys())
         msg.attach(email)
     if attachments is not []:
         # TODO
@@ -212,7 +219,7 @@ def main():
         email = make_email(parsed['headers'], parsed[
                            'body'], parsed['attachments'])
 
-        print email.as_string()
+        print(email.as_string())
 
 
 if __name__ == '__main__':
